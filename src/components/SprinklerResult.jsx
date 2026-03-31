@@ -25,7 +25,9 @@ function buildHourly(intradayData, sprinkles, baselineIntradayData, erlangNeeded
       erlangNeed = Math.max(erlangNeeded[h * 2], erlangNeeded[h * 2 + 1])
     }
 
-    return { label: `${a.time}–${endTime}`, short: a.time, calls: totalCalls, sprinkle: sprinkles[h], sl, preSl, baselineAvail, erlangNeed }
+    // For hours with no sprinkles added, Post-SL = Pre-SL (no change was made to this hour)
+    const displaySl = sprinkles[h] === 0 ? preSl : sl
+    return { label: `${a.time}–${endTime}`, short: a.time, calls: totalCalls, sprinkle: sprinkles[h], sl: displaySl, preSl, baselineAvail, erlangNeed }
   })
 }
 
@@ -104,6 +106,7 @@ export default function SprinklerResult({ sprinkles, intradayData, baselineIntra
           <thead>
             <tr className="border-b border-gray-200 text-left">
               <th className="pb-2 pr-3 font-medium text-gray-500 text-xs uppercase tracking-wide">Hour</th>
+              <th className="pb-2 pr-3 font-medium text-gray-400 text-xs uppercase tracking-wide text-right">Forecast Calls</th>
               <th className="pb-2 pr-3 font-medium text-gray-400 text-xs uppercase tracking-wide text-right">Baseline Avail</th>
               <th className="pb-2 pr-3 font-medium text-gray-400 text-xs uppercase tracking-wide text-right">Needed</th>
               <th className="pb-2 pr-3 font-medium text-blue-500 text-xs uppercase tracking-wide text-right">Sprinkle</th>
@@ -122,6 +125,7 @@ export default function SprinklerResult({ sprinkles, intradayData, baselineIntra
               return (
                 <tr key={i} className="border-b border-gray-50 even:bg-gray-50/60">
                   <td className="py-1.5 pr-3 text-gray-600 whitespace-nowrap text-xs">{row.label}</td>
+                  <td className="py-1.5 pr-3 text-right text-gray-500">{Math.round(row.calls)}</td>
                   <td className="py-1.5 pr-3 text-right text-gray-500">
                     {row.baselineAvail !== null ? row.baselineAvail.toFixed(1) : '—'}
                   </td>

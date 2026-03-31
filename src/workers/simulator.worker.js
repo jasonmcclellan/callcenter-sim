@@ -315,7 +315,8 @@ self.onmessage = function (e) {
 
   } else if (mode === 'sprinkler') {
     const { baselineAgents, slTargetPct, numRuns, totalCallsPerDay, avgHandleTime,
-            slThreshold, patienceThreshold, earlyPct, maxSprinklePerHour = 50 } = e.data
+            slThreshold, patienceThreshold, earlyPct, maxSprinklePerHour = 50,
+            sprinkleCutoffHour = 12 } = e.data
     const simParams  = { totalCallsPerDay, avgHandleTime, slThreshold, patienceThreshold, earlyPct }
     const searchRuns = Math.min(numRuns, 60)
     const zeroSprinkles = new Array(12).fill(0)
@@ -338,7 +339,9 @@ self.onmessage = function (e) {
       const avail1   = baselineIntradayData[h * 2 + 1].agents
       const gap0     = Math.max(0, erlangNeeded[h * 2]     - avail0)
       const gap1     = Math.max(0, erlangNeeded[h * 2 + 1] - avail1)
-      sprinkles[h]   = Math.min(Math.ceil(Math.max(gap0, gap1)), maxSprinklePerHour)
+      sprinkles[h]   = h < sprinkleCutoffHour
+        ? Math.min(Math.ceil(Math.max(gap0, gap1)), maxSprinklePerHour)
+        : 0
     }
 
     const totalSprinkles = sprinkles.reduce((a, b) => a + b, 0)
@@ -356,38 +359,44 @@ self.onmessage = function (e) {
     })
 
   } else if (mode === 'sprinklerSensitivity') {
-    // Run the final sprinkle schedule at baseline, baseline+1 … baseline+5 agents
-    const { sprinkles, baselineAgents, numRuns, totalCallsPerDay, avgHandleTime,
-            slThreshold, patienceThreshold, earlyPct } = e.data
-    const simParams   = { totalCallsPerDay, avgHandleTime, slThreshold, patienceThreshold, earlyPct }
-    const probeRuns   = Math.min(numRuns, 60)
-    const agentCounts = Array.from({ length: 6 }, (_, i) => baselineAgents + i)
+    // For each hour: show baseline agents available, then projected SL at +1…+7 sprinkles.
+    const { baselineAgents, numRuns, totalCallsPerDay, avgHandleTime,
+            slThreshold, patienceThreshold, earlyPct, maxSprinklePerHour = 7 } = e.data
+    const simParams  = { totalCallsPerDay, avgHandleTime, slThreshold, patienceThreshold, earlyPct }
+    const probeRuns  = Math.min(numRuns, 60)
+    const maxSprinkle = maxSprinklePerHour
 
-    function hourlySlFrom(intradayData) {
-      return Array.from({ length: 12 }, (_, h) => {
-        const a = intradayData[h * 2]
-        const b = intradayData[h * 2 + 1]
-        const total = a.calls + b.calls
-        if (total === 0 || (a.sl === null && b.sl === null)) return null
-        return ((a.sl ?? 0) * a.calls + (b.sl ?? 0) * b.calls) / total
-      })
-    }
+    // One simulation run gives call volumes + per-interval baseline agent availability
+    const baseSim = runAllSimulations({ ...simParams, numAgents: baselineAgents, numRuns: probeRuns })
 
-    const firstSim = runAllSimulations({ ...simParams, baselineAgents, sprinkles, numRuns: probeRuns })
     const hours = Array.from({ length: 12 }, (_, h) => {
-      const start = firstSim.intradayData[h * 2].time
-      const end   = h < 11 ? firstSim.intradayData[(h + 1) * 2].time : '8:30 PM'
+      const start = baseSim.intradayData[h * 2].time
+      const end   = h < 11 ? baseSim.intradayData[(h + 1) * 2].time : '8:30 PM'
       return `${start}–${end}`
     })
 
-    const grid = [hourlySlFrom(firstSim.intradayData)]
-    for (let i = 1; i < agentCounts.length; i++) {
-      const sim = runAllSimulations({ ...simParams, baselineAgents: agentCounts[i], sprinkles, numRuns: probeRuns })
-      grid.push(hourlySlFrom(sim.intradayData))
-    }
+    // Per-hour average baseline agents available (accounts for shifts, lunch, breaks)
+    const baselineAvail = Array.from({ length: 12 }, (_, h) =>
+      (baseSim.intradayData[h * 2].agents + baseSim.intradayData[h * 2 + 1].agents) / 2
+    )
 
-    const transposed = Array.from({ length: 12 }, (_, h) => grid.map((col) => col[h]))
-    self.postMessage({ type: 'result', agentCounts, hours, grid: transposed })
+    // grid[h][s] = projected SL% for hour h with s+1 sprinkle agents added
+    const sprinkleCounts = Array.from({ length: maxSprinkle }, (_, i) => i + 1)
+    const grid = Array.from({ length: 12 }, (_, h) =>
+      sprinkleCounts.map(s => {
+        const ivA = baseSim.intradayData[h * 2]
+        const ivB = baseSim.intradayData[h * 2 + 1]
+        const totalCalls = ivA.calls + ivB.calls
+        if (totalCalls === 0) return null
+        const agentsA = Math.round(ivA.agents) + s
+        const agentsB = Math.round(ivB.agents) + s
+        const slA = erlangCServiceLevel(ivA.calls / INTERVAL_SECS, avgHandleTime, agentsA, slThreshold) * 100
+        const slB = erlangCServiceLevel(ivB.calls / INTERVAL_SECS, avgHandleTime, agentsB, slThreshold) * 100
+        return (slA * ivA.calls + slB * ivB.calls) / totalCalls
+      })
+    )
+
+    self.postMessage({ type: 'result', gridType: 'sprinkleSL', hours, baselineAvail, sprinkleCounts, grid })
 
   } else if (mode === 'sensitivity') {
     // Run simulation at base, base+1 … base+5 and return per-hour SL grid

@@ -1,3 +1,5 @@
+import React from 'react'
+
 const sharedFields = [
   { key: 'totalCallsPerDay', label: 'Total Calls / Day',  min: 10,  max: 50000, step: 10, unit: '' },
   { key: 'avgHandleTime',    label: 'Avg Handle Time',    min: 10,  max: 3600,  step: 10, unit: 'seconds' },
@@ -27,49 +29,87 @@ function NumberInput({ field, value, onChange }) {
   )
 }
 
+const SALT_PARTICLES = [
+  { dx: -5, dy: 20, delay: 0,    dur: 0.7  },
+  { dx:  3, dy: 24, delay: 0.15, dur: 0.8  },
+  { dx: -1, dy: 18, delay: 0.05, dur: 0.65 },
+  { dx:  6, dy: 22, delay: 0.25, dur: 0.75 },
+  { dx: -4, dy: 26, delay: 0.1,  dur: 0.85 },
+  { dx:  1, dy: 21, delay: 0.2,  dur: 0.7  },
+]
+
+const saltKeyframes = SALT_PARTICLES.map((p, i) => `
+  @keyframes salt${i} {
+    0%   { transform: translate(0,0) scale(1); opacity: 1; }
+    100% { transform: translate(${p.dx}px,${p.dy}px) scale(0.5); opacity: 0; }
+  }
+`).join('')
+
 export default function SimulatorForm({ mode, onModeChange, params, onChange, onRun, running }) {
+  const [sprinklerHovered, setSprinklerHovered] = React.useState(false)
   const latePct      = 100 - params.earlyPct
   const isOptimize   = mode === 'optimize'
   const isSprinkler  = mode === 'sprinkler'
 
   return (
-    <div className="bg-white rounded-2xl shadow-md p-6 space-y-5">
+    <div className="relative bg-white rounded-2xl shadow-md p-6 space-y-5">
       {/* Mode toggle */}
       <div>
         <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-2">Mode</p>
-        <div className="flex rounded-lg border border-gray-200 overflow-hidden text-sm font-medium">
+        <div className="flex rounded-lg border border-gray-200 text-sm font-medium">
           <button
             onClick={() => onModeChange('manual')}
-            className={`flex-1 py-2 transition-colors ${
-              mode === 'manual'
-                ? 'bg-blue-600 text-white'
-                : 'text-gray-500 hover:bg-gray-50'
+            className={`flex-1 py-2.5 px-1 transition-colors flex flex-col items-center gap-0.5 rounded-l-lg ${
+              mode === 'manual' ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
             }`}
           >
-            Manual
+            <span className="font-medium">Manual</span>
+            <span className="font-normal leading-tight" style={{ fontSize: 10, opacity: 0.8 }}>Simulate fixed staffing</span>
           </button>
           <button
             onClick={() => onModeChange('optimize')}
-            className={`flex-1 py-2 transition-colors ${
-              isOptimize
-                ? 'bg-blue-600 text-white'
-                : 'text-gray-500 hover:bg-gray-50'
+            className={`flex-1 py-2.5 px-1 transition-colors flex flex-col items-center gap-0.5 ${
+              isOptimize ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
             }`}
           >
-            Optimizer
+            <span className="font-medium">Optimizer</span>
+            <span className="font-normal leading-tight" style={{ fontSize: 10, opacity: 0.8 }}>Find minimum to hit target</span>
           </button>
-          <button
-            onClick={() => onModeChange('sprinkler')}
-            className={`flex-1 py-2 transition-colors ${
-              isSprinkler
-                ? 'bg-blue-600 text-white'
-                : 'text-gray-500 hover:bg-gray-50'
-            }`}
-          >
-            Sprinkler
-          </button>
+          <div className="relative flex-1">
+            <button
+              onClick={() => onModeChange('sprinkler')}
+              onMouseEnter={() => setSprinklerHovered(true)}
+              onMouseLeave={() => setSprinklerHovered(false)}
+              className={`w-full py-2.5 px-1 transition-colors flex flex-col items-center gap-0.5 rounded-r-lg ${
+                isSprinkler ? 'bg-blue-600 text-white' : 'text-gray-500 hover:bg-gray-50'
+              }`}
+            >
+              <span className="font-medium">Sprinkler</span>
+              <span className="font-normal leading-tight" style={{ fontSize: 10, opacity: 0.8 }}>Add part-hour gap coverage</span>
+            </button>
+          </div>
         </div>
       </div>
+
+      {sprinklerHovered && (
+        <>
+          <style>{saltKeyframes}</style>
+          <div className="absolute pointer-events-none flex flex-col items-center" style={{ top: 90, left: '50%', transform: 'translateX(-50%)', zIndex: 50 }}>
+            <span style={{ fontSize: '2.2rem', transform: 'rotate(145deg)', display: 'inline-block' }}>🧂</span>
+            <div className="relative" style={{ width: 30, height: 36 }}>
+              {SALT_PARTICLES.map((p, i) => (
+                <div key={i} style={{
+                  position: 'absolute', left: '50%', top: 0,
+                  width: 4, height: 4, borderRadius: '50%',
+                  backgroundColor: '#94a3b8',
+                  animation: `salt${i} ${p.dur}s ease-in ${p.delay}s infinite`,
+                  opacity: 0,
+                }} />
+              ))}
+            </div>
+          </div>
+        </>
+      )}
 
       <h2 className="text-sm font-semibold text-gray-700 -mb-1">Parameters</h2>
 
@@ -93,6 +133,31 @@ export default function SimulatorForm({ mode, onModeChange, params, onChange, on
               value={params.maxSprinklePerHour}
               onChange={onChange}
             />
+            <div className="flex flex-col gap-1 sm:col-span-2">
+              <label className="text-sm font-medium text-gray-600">Sprinkle Cutoff</label>
+              <select
+                value={params.sprinkleCutoffHour}
+                onChange={(e) => onChange('sprinkleCutoffHour', Number(e.target.value))}
+                className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent"
+              >
+                {[
+                  { label: 'No cutoff',               value: 12 },
+                  { label: 'Stop by 7:30 PM',         value: 11 },
+                  { label: 'Stop by 6:30 PM',         value: 10 },
+                  { label: 'Stop by 5:30 PM',         value:  9 },
+                  { label: 'Stop by 4:30 PM',         value:  8 },
+                  { label: 'Stop by 3:30 PM',         value:  7 },
+                  { label: 'Stop by 2:30 PM',         value:  6 },
+                  { label: 'Stop by 1:30 PM',         value:  5 },
+                  { label: 'Stop by 12:30 PM',        value:  4 },
+                  { label: 'Stop by 11:30 AM',        value:  3 },
+                  { label: 'Stop by 10:30 AM',        value:  2 },
+                  { label: 'Stop by 9:30 AM',         value:  1 },
+                ].map(({ label, value }) => (
+                  <option key={value} value={value}>{label}</option>
+                ))}
+              </select>
+            </div>
           </>
         ) : (
           <NumberInput

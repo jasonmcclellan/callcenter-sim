@@ -13,6 +13,7 @@ const DEFAULTS = {
   minAgents:         5,
   baselineAgents:    8,
   maxSprinklePerHour: 5,
+  sprinkleCutoffHour: 12,
   totalCallsPerDay:  1500,
   avgHandleTime:     600,
   slThreshold:       120,
@@ -146,7 +147,10 @@ export default function App() {
             CC
           </div>
           <div>
-            <h1 className="text-lg font-bold text-gray-800">Call Center Simulator</h1>
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg font-bold text-gray-800">Call Center Simulator</h1>
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Demo Only — Not for Production</span>
+            </div>
             <p className="text-xs text-gray-400">
               Monte Carlo · Single Queue · M/M/c · 8:30 AM–8:30 PM · Peak 2:00 PM
             </p>
@@ -368,7 +372,7 @@ export default function App() {
                     baseAgents={isSprinkler ? params.baselineAgents : (results.recommendedAgents ?? params.numAgents)}
                     slTargetPct={results.slTargetPct}
                     loading={sensitivityLoading}
-                    label={isSprinkler ? 'Baseline Agent Sensitivity (with sprinkle schedule held fixed)' : undefined}
+                    label={isSprinkler ? 'Projected SL by Sprinkle Agents Added' : undefined}
                   />
                 )}
               </>
